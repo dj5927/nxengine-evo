@@ -23,12 +23,10 @@ jobs:
             libsdl2-dev libsdl2-mixer-dev libsdl2-image-dev \
             libpng-dev libjpeg-dev libz-dev \
             libslirp-dev wget file libfuse2 \
-            libgl1-mesa-dev libegl1-mesa-dev libvulkan-dev \
-            libdrm-dev libudev-dev libgbm-dev
+            libgl1-mesa-dev libegl1-mesa-dev libgbm-dev libdrm-dev
 
       - name: Patch Source for 60FPS SpeedUp
         run: |
-          # 게임 루프 지연 시간을 20ms에서 16ms로 줄여 1.2배 속도 달성
           find . -type f \( -name "*.cpp" -o -name "*.h" \) -exec sed -i 's/delay = 20/delay = 16/g' {} +
           find . -type f \( -name "*.cpp" -o -name "*.h" \) -exec sed -i 's/20ms/16ms/g' {} +
           find . -type f \( -name "*.cpp" -o -name "*.h" \) -exec sed -i 's/TICKS_PER_SECOND = 50/TICKS_PER_SECOND = 60/g' {} +
@@ -43,10 +41,15 @@ jobs:
         run: |
           cd build
           make DESTDIR=../AppDir install
+          
+          # [핵심] 그래픽 라이브러리 충돌 방지: 
+          # AppImage 내부에 포함된 libstdc++, libgcc_s 등을 삭제하여 
+          # 호스트(Steam Deck) 시스템의 라이브러리를 쓰게 만듭니다.
+          rm -rf ../AppDir/usr/lib/libstdc++.so* || true
+          rm -rf ../AppDir/usr/lib/libgcc_s.so* || true
 
       - name: Download AppImage Tools
         run: |
-          # 도구들 다운로드
           wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
           wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage
           chmod +x linuxdeploy*.AppImage
@@ -55,26 +58,29 @@ jobs:
         env:
           ARCH: x86_64
           OUTPUT_FILE: NXEngine-Evo-v2.6.5-1-Linux-x86_64.AppImage
-          # 그래픽 드라이버 이슈 해결을 위한 환경 변수 (번들링 시 도움)
-          EXTRA_QT_PLUGINS: "platforms" 
+          # [핵심 환경변수] 그래픽 드라이버를 시스템에서 가져오도록 강제
+          APPIMAGE_EXTRACT_AND_RUN: 1
         run: |
           export PATH=".:$PATH"
           
           # linuxdeploy 실행
-          # --output appimage 옵션을 사용하여 표준적인 방식으로 생성합니다.
-          ./linuxdeploy-x86_64.AppImage --appdir AppDir --output appimage
+          # --exclude-library 옵션으로 시스템 핵심 그래픽 라이브러리가 번들링되는 것을 방지
+          ./linuxdeploy-x86_64.AppImage --appdir AppDir \
+            --exclude-library libGL.so.1 \
+            --exclude-library libdrm.so.2 \
+            --exclude-library libgbm.so.1 \
+            --output appimage
           
-          # 파일 이름 변경 로직 (에러 방지용)
           GENERATED_FILE=$(find . -maxdepth 1 -name "*.AppImage" ! -name "linuxdeploy*" | head -n 1)
           if [ -n "$GENERATED_FILE" ]; then
             mv "$GENERATED_FILE" "$OUTPUT_FILE"
           else
-            echo "Error: Resulting AppImage not found."
+            echo "Error: AppImage not found."
             exit 1
           fi
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: NXEngine-Evo-60FPS-Fixed
+          name: NXEngine-Evo-60FPS-V3
           path: NXEngine-Evo-v2.6.5-1-Linux-x86_64.AppImage
