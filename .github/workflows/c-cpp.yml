@@ -23,7 +23,6 @@ jobs:
             libsdl2-dev libsdl2-mixer-dev libsdl2-image-dev \
             libpng-dev libjpeg-dev libz-dev \
             libslirp-dev wget file libfuse2 \
-            # 그래픽 오류 해결을 위한 추가 패키지들
             libgl1-mesa-dev libegl1-mesa-dev libvulkan-dev \
             libdrm-dev libudev-dev libgbm-dev
 
@@ -32,13 +31,11 @@ jobs:
           # 게임 루프 지연 시간을 20ms에서 16ms로 줄여 1.2배 속도 달성
           find . -type f \( -name "*.cpp" -o -name "*.h" \) -exec sed -i 's/delay = 20/delay = 16/g' {} +
           find . -type f \( -name "*.cpp" -o -name "*.h" \) -exec sed -i 's/20ms/16ms/g' {} +
-          # 추가적인 타이머 상수 패치
           find . -type f \( -name "*.cpp" -o -name "*.h" \) -exec sed -i 's/TICKS_PER_SECOND = 50/TICKS_PER_SECOND = 60/g' {} +
 
       - name: Configure and Build
         run: |
           mkdir build && cd build
-          # -DCMAKE_INSTALL_PREFIX=/usr 는 AppImage 표준입니다.
           cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
           make -j$(nproc)
 
@@ -47,46 +44,37 @@ jobs:
           cd build
           make DESTDIR=../AppDir install
 
-      - name: Download and Setup AppImage Tools
+      - name: Download AppImage Tools
         run: |
-          # linuxdeploy 다운로드
+          # 도구들 다운로드
           wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
-          
-          # AppImage 플러그인 다운로드
           wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage
-          
-          # [중요] 그래픽 전용 플러그인 추가 (시스템 그래픽 라이브러리를 번들링)
-          wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-gluon/releases/download/continuous/linuxdeploy-plugin-gluon-x86_64.AppImage
-          
           chmod +x linuxdeploy*.AppImage
 
       - name: Generate AppImage
         env:
           ARCH: x86_64
           OUTPUT_FILE: NXEngine-Evo-v2.6.5-1-Linux-x86_64.AppImage
+          # 그래픽 드라이버 이슈 해결을 위한 환경 변수 (번들링 시 도움)
+          EXTRA_QT_PLUGINS: "platforms" 
         run: |
-          # 플러그인들이 서로를 찾을 수 있도록 현재 폴더를 PATH에 추가
           export PATH=".:$PATH"
           
           # linuxdeploy 실행
-          # --plugin appimage: 최종 AppImage 생성
-          # --plugin gluon: 그래픽 라이브러리(OpenGL/EGL 등) 강제 포함
-          ./linuxdeploy-x86_64.AppImage --appdir AppDir \
-            --plugin gluon \
-            --plugin appimage
+          # --output appimage 옵션을 사용하여 표준적인 방식으로 생성합니다.
+          ./linuxdeploy-x86_64.AppImage --appdir AppDir --output appimage
           
-          # [중요] mv 에러 방지용 로직: 
-          # 생성된 .AppImage 파일을 하나만 찾아서 정확히 원하는 이름으로 변경합니다.
+          # 파일 이름 변경 로직 (에러 방지용)
           GENERATED_FILE=$(find . -maxdepth 1 -name "*.AppImage" ! -name "linuxdeploy*" | head -n 1)
           if [ -n "$GENERATED_FILE" ]; then
             mv "$GENERATED_FILE" "$OUTPUT_FILE"
           else
-            echo "Error: AppImage file not found!"
+            echo "Error: Resulting AppImage not found."
             exit 1
           fi
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: NXEngine-Evo-v2.6.5-1-Linux-60FPS
+          name: NXEngine-Evo-60FPS-Fixed
           path: NXEngine-Evo-v2.6.5-1-Linux-x86_64.AppImage
