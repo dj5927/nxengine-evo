@@ -25,23 +25,25 @@ jobs:
             cmake \
             libsdl2-dev \
             libsdl2-mixer-dev \
+            libsdl2-image-dev \
             libpng-dev \
+            libjpeg-dev \
+            libz-dev \
             libslirp-dev \
             wget \
             file \
-            libfuse2 # AppImage 실행 도구에 필요
+            libfuse2
 
       - name: Configure and Build
         run: |
           mkdir build && cd build
-          # -DCMAKE_INSTALL_PREFIX=/usr 는 AppImage 내부 표준 경로입니다.
+          # SDL2_image 등 누락된 경로가 없는지 다시 확인하며 빌드
           cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
           make -j$(nproc)
 
       - name: Prepare AppDir
         run: |
           cd build
-          # 임시 설치 폴더(AppDir)에 결과물 수집
           make DESTDIR=../AppDir install
 
       - name: Download AppImage Tools
@@ -55,14 +57,12 @@ jobs:
           ARCH: x86_64
           OUTPUT_FILE: NXEngine-Evo-v2.6.5-1-Linux-x86_64.AppImage
         run: |
-          # linuxdeploy를 사용하여 의존성 라이브러리 포함 및 패키징
-          # --appdir AppDir: 수집된 파일들이 있는 폴더
+          # linuxdeploy 실행
           ./linuxdeploy-x86_64.AppImage --appdir AppDir \
             --plugin appimage \
             --output appimage
           
-          # 생성된 파일명을 사용자가 요청한 이름으로 변경
-          # 기본 파일명은 NXEngine_Evo-x86_64.AppImage 와 같은 형태입니다.
+          # 파일명 변경
           mv NXEngine_Evo*.AppImage "$OUTPUT_FILE"
 
       - name: Upload Artifact
