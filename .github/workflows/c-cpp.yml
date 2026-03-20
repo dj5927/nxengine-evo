@@ -22,11 +22,11 @@ jobs:
             build-essential cmake \
             libsdl2-dev libsdl2-mixer-dev libsdl2-image-dev \
             libpng-dev libjpeg-dev libz-dev \
-            libslirp-dev wget file libfuse2 \
-            libgl1-mesa-dev libegl1-mesa-dev libgbm-dev libdrm-dev
+            libslirp-dev wget file libfuse2
 
       - name: Patch Source for 60FPS SpeedUp
         run: |
+          # 1.2배 속도 향상 패치
           find . -type f \( -name "*.cpp" -o -name "*.h" \) -exec sed -i 's/delay = 20/delay = 16/g' {} +
           find . -type f \( -name "*.cpp" -o -name "*.h" \) -exec sed -i 's/20ms/16ms/g' {} +
           find . -type f \( -name "*.cpp" -o -name "*.h" \) -exec sed -i 's/TICKS_PER_SECOND = 50/TICKS_PER_SECOND = 60/g' {} +
@@ -34,19 +34,20 @@ jobs:
       - name: Configure and Build
         run: |
           mkdir build && cd build
+          # -DCMAKE_INSTALL_PREFIX=/usr 설정
           cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
           make -j$(nproc)
 
       - name: Prepare AppDir
         run: |
           cd build
+          # 1. 프로그램 설치
           make DESTDIR=../AppDir install
           
-          # [핵심] 그래픽 라이브러리 충돌 방지: 
-          # AppImage 내부에 포함된 libstdc++, libgcc_s 등을 삭제하여 
-          # 호스트(Steam Deck) 시스템의 라이브러리를 쓰게 만듭니다.
-          rm -rf ../AppDir/usr/lib/libstdc++.so* || true
-          rm -rf ../AppDir/usr/lib/libgcc_s.so* || true
+          # 2. [핵심] 데이터 파일 복사
+          # 소스 폴더 내의 data 폴더를 AppDir 내부의 올바른 위치로 강제 복사합니다.
+          mkdir -p ../AppDir/usr/share/nxengine
+          cp -r ../data ../AppDir/usr/share/nxengine/
 
       - name: Download AppImage Tools
         run: |
@@ -58,19 +59,13 @@ jobs:
         env:
           ARCH: x86_64
           OUTPUT_FILE: NXEngine-Evo-v2.6.5-1-Linux-x86_64.AppImage
-          # [핵심 환경변수] 그래픽 드라이버를 시스템에서 가져오도록 강제
-          APPIMAGE_EXTRACT_AND_RUN: 1
         run: |
           export PATH=".:$PATH"
           
           # linuxdeploy 실행
-          # --exclude-library 옵션으로 시스템 핵심 그래픽 라이브러리가 번들링되는 것을 방지
-          ./linuxdeploy-x86_64.AppImage --appdir AppDir \
-            --exclude-library libGL.so.1 \
-            --exclude-library libdrm.so.2 \
-            --exclude-library libgbm.so.1 \
-            --output appimage
+          ./linuxdeploy-x86_64.AppImage --appdir AppDir --output appimage
           
+          # 파일 이름 변경
           GENERATED_FILE=$(find . -maxdepth 1 -name "*.AppImage" ! -name "linuxdeploy*" | head -n 1)
           if [ -n "$GENERATED_FILE" ]; then
             mv "$GENERATED_FILE" "$OUTPUT_FILE"
@@ -82,5 +77,5 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: NXEngine-Evo-60FPS-V3
+          name: NXEngine-Evo-60FPS-Final
           path: NXEngine-Evo-v2.6.5-1-Linux-x86_64.AppImage
