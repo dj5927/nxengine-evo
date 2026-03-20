@@ -1,9 +1,7 @@
-name: Build NXEngine-Evo AppImage
+name: Build NXEngine-Evo 60FPS SpeedUp
 
 on:
   push:
-    branches: [ "master", "main" ]
-  pull_request:
     branches: [ "master", "main" ]
   workflow_dispatch:
 
@@ -21,18 +19,17 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            build-essential \
-            cmake \
-            libsdl2-dev \
-            libsdl2-mixer-dev \
-            libsdl2-image-dev \
-            libpng-dev \
-            libjpeg-dev \
-            libz-dev \
-            libslirp-dev \
-            wget \
-            file \
-            libfuse2
+            build-essential cmake libsdl2-dev libsdl2-mixer-dev \
+            libsdl2-image-dev libpng-dev libjpeg-dev libz-dev \
+            libslirp-dev wget file libfuse2
+
+      - name: Patch Source for 60FPS SpeedUp
+        run: |
+          # 게임 루프 지연 시간을 20ms에서 16ms로 줄여 60FPS(속도 1.2배) 달성
+          find . -type f \( -name "*.cpp" -o -name "*.h" \) -exec sed -i 's/delay = 20/delay = 16/g' {} +
+          find . -type f \( -name "*.cpp" -o -name "*.h" \) -exec sed -i 's/20ms/16ms/g' {} +
+          # 추가적인 타이머 상수 패치
+          find . -type f \( -name "*.cpp" -o -name "*.h" \) -exec sed -i 's/TICKS_PER_SECOND = 50/TICKS_PER_SECOND = 60/g' {} +
 
       - name: Configure and Build
         run: |
@@ -56,16 +53,19 @@ jobs:
           ARCH: x86_64
           OUTPUT_FILE: NXEngine-Evo-v2.6.5-1-Linux-x86_64.AppImage
         run: |
-          # 플러그인 실행 경로를 현재 디렉토리로 설정 (매우 중요)
           export PATH=".:$PATH"
+          # linuxdeploy 실행
+          ./linuxdeploy-x86_64.AppImage --appdir AppDir --output appimage
           
-          # linuxdeploy 명령어를 최신 문법에 맞게 수정
-          ./linuxdeploy-x86_64.AppImage --appdir AppDir \
-            --output appimage
-          
-          # 생성된 파일명을 요청하신 형식으로 변경
-          # 기본 이름은 보통 NXEngine_Evo-x86_64.AppImage 와 같은 형태입니다.
-          mv *.AppImage "$OUTPUT_FILE"
+          # [중요] mv 에러 방지용 로직: 
+          # 생성된 .AppImage 파일을 하나만 찾아서 정확히 원하는 이름으로 변경합니다.
+          GENERATED_FILE=$(find . -maxdepth 1 -name "*.AppImage" ! -name "linuxdeploy*" | head -n 1)
+          if [ -n "$GENERATED_FILE" ]; then
+            mv "$GENERATED_FILE" "$OUTPUT_FILE"
+          else
+            echo "Error: AppImage file not found!"
+            exit 1
+          fi
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
