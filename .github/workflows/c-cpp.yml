@@ -3,11 +3,14 @@ name: Build NXEngine-Evo AppImage
 on:
   push:
     branches: [ "master", "main" ]
-  workflow_dispatch:
+  pull_request:
+    branches: [ "master", "main" ]
+  workflow_dispatch: # 수동 실행 버튼 활성화
 
 jobs:
   build:
-    runs-on: ubuntu-20.04  # 이전 버전 호환성을 위해 20.04 권장
+    # 대기 시간이 너무 길면 ubuntu-latest로 변경해 보세요.
+    runs-on: ubuntu-20.04 
 
     steps:
       - name: Checkout code
@@ -28,42 +31,41 @@ jobs:
             wget \
             file
 
-      - name: Build NXEngine-Evo
+      - name: Configure and Build
         run: |
           mkdir build && cd build
-          # AppImage 표준 경로인 /usr로 prefix 설정
+          # 설치 경로를 /usr로 지정해야 AppImage 내부 구조와 일치합니다.
           cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
           make -j$(nproc)
 
       - name: Prepare AppDir
         run: |
           cd build
-          # 임시 설치 디렉토리(AppDir) 생성
+          # 임시 디렉토리에 빌드 결과물 수집
           make DESTDIR=../AppDir install
 
       - name: Download AppImage Tools
         run: |
-          wget https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
-          wget https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage
           chmod +x linuxdeploy*.AppImage
 
       - name: Generate AppImage
         env:
-          OUTPUT: NXEngine-Evo-v2.6.5-1-Linux-x86_64.AppImage
+          ARCH: x86_64
+          OUTPUT_NAME: NXEngine-Evo-v2.6.5-1-Linux-x86_64.AppImage
         run: |
-          # NXEngine-Evo 실행 파일 위치를 확인하여 linuxdeploy 실행
-          # 아이콘과 데스크탑 파일은 빌드 결과물 내에 포함된 것을 사용합니다.
+          # linuxdeploy 실행: 바이너리, 데스크탑 파일, 아이콘을 하나로 묶음
           ./linuxdeploy-x86_64.AppImage --appdir AppDir \
             --plugin appimage \
-            --output appimage \
-            --desktop-file AppDir/usr/share/applications/*.desktop \
-            --icon-file AppDir/usr/share/icons/hicolor/scalable/apps/*.svg
+            --output appimage
           
-          # 생성된 파일 이름을 요청하신 형식으로 변경
-          mv NXEngine_Evo*.AppImage $OUTPUT
+          # 생성된 파일명을 요청하신 형식으로 변경
+          # 기본 생성 이름이 NXEngine_Evo... 형식이므로 와일드카드로 매칭하여 변경합니다.
+          mv NXEngine_Evo*.AppImage "$OUTPUT_NAME"
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: NXEngine-Evo-Linux-AppImage
+          name: NXEngine-Evo-AppImage
           path: NXEngine-Evo-v2.6.5-1-Linux-x86_64.AppImage
