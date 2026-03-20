@@ -1,0 +1,69 @@
+name: Build NXEngine-Evo AppImage
+
+on:
+  push:
+    branches: [ "master", "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04  # 이전 버전 호환성을 위해 20.04 권장
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            libsdl2-dev \
+            libsdl2-mixer-dev \
+            libpng-dev \
+            libslirp-dev \
+            wget \
+            file
+
+      - name: Build NXEngine-Evo
+        run: |
+          mkdir build && cd build
+          # AppImage 표준 경로인 /usr로 prefix 설정
+          cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+          make -j$(nproc)
+
+      - name: Prepare AppDir
+        run: |
+          cd build
+          # 임시 설치 디렉토리(AppDir) 생성
+          make DESTDIR=../AppDir install
+
+      - name: Download AppImage Tools
+        run: |
+          wget https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          wget https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/continuous/linuxdeploy-plugin-appimage-x86_64.AppImage
+          chmod +x linuxdeploy*.AppImage
+
+      - name: Generate AppImage
+        env:
+          OUTPUT: NXEngine-Evo-v2.6.5-1-Linux-x86_64.AppImage
+        run: |
+          # NXEngine-Evo 실행 파일 위치를 확인하여 linuxdeploy 실행
+          # 아이콘과 데스크탑 파일은 빌드 결과물 내에 포함된 것을 사용합니다.
+          ./linuxdeploy-x86_64.AppImage --appdir AppDir \
+            --plugin appimage \
+            --output appimage \
+            --desktop-file AppDir/usr/share/applications/*.desktop \
+            --icon-file AppDir/usr/share/icons/hicolor/scalable/apps/*.svg
+          
+          # 생성된 파일 이름을 요청하신 형식으로 변경
+          mv NXEngine_Evo*.AppImage $OUTPUT
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NXEngine-Evo-Linux-AppImage
+          path: NXEngine-Evo-v2.6.5-1-Linux-x86_64.AppImage
