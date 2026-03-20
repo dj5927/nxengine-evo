@@ -5,12 +5,11 @@ on:
     branches: [ "master", "main" ]
   pull_request:
     branches: [ "master", "main" ]
-  workflow_dispatch: # 수동 실행 버튼 활성화
+  workflow_dispatch:
 
 jobs:
   build:
-    # 대기 시간이 너무 길면 ubuntu-latest로 변경해 보세요.
-    runs-on: ubuntu-20.04 
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout code
@@ -29,19 +28,20 @@ jobs:
             libpng-dev \
             libslirp-dev \
             wget \
-            file
+            file \
+            libfuse2 # AppImage 실행 도구에 필요
 
       - name: Configure and Build
         run: |
           mkdir build && cd build
-          # 설치 경로를 /usr로 지정해야 AppImage 내부 구조와 일치합니다.
+          # -DCMAKE_INSTALL_PREFIX=/usr 는 AppImage 내부 표준 경로입니다.
           cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
           make -j$(nproc)
 
       - name: Prepare AppDir
         run: |
           cd build
-          # 임시 디렉토리에 빌드 결과물 수집
+          # 임시 설치 폴더(AppDir)에 결과물 수집
           make DESTDIR=../AppDir install
 
       - name: Download AppImage Tools
@@ -53,19 +53,20 @@ jobs:
       - name: Generate AppImage
         env:
           ARCH: x86_64
-          OUTPUT_NAME: NXEngine-Evo-v2.6.5-1-Linux-x86_64.AppImage
+          OUTPUT_FILE: NXEngine-Evo-v2.6.5-1-Linux-x86_64.AppImage
         run: |
-          # linuxdeploy 실행: 바이너리, 데스크탑 파일, 아이콘을 하나로 묶음
+          # linuxdeploy를 사용하여 의존성 라이브러리 포함 및 패키징
+          # --appdir AppDir: 수집된 파일들이 있는 폴더
           ./linuxdeploy-x86_64.AppImage --appdir AppDir \
             --plugin appimage \
             --output appimage
           
-          # 생성된 파일명을 요청하신 형식으로 변경
-          # 기본 생성 이름이 NXEngine_Evo... 형식이므로 와일드카드로 매칭하여 변경합니다.
-          mv NXEngine_Evo*.AppImage "$OUTPUT_NAME"
+          # 생성된 파일명을 사용자가 요청한 이름으로 변경
+          # 기본 파일명은 NXEngine_Evo-x86_64.AppImage 와 같은 형태입니다.
+          mv NXEngine_Evo*.AppImage "$OUTPUT_FILE"
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: NXEngine-Evo-AppImage
+          name: NXEngine-Evo-v2.6.5-1-Linux-x86_64
           path: NXEngine-Evo-v2.6.5-1-Linux-x86_64.AppImage
